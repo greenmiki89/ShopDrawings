@@ -3,55 +3,48 @@
 <head><title>Box Auth</title></head>
 <body style="font-family:sans-serif;padding:40px;text-align:center;background:#f8f9fa">
 <h2 id="msg" style="color:#1a1a2e">Connecting to Box…</h2>
-<p style="color:#6B7280;margin-top:12px">You can close this window once connected.</p>
+<p id="sub" style="color:#6B7280;margin-top:12px">You can close this window once connected.</p>
 <script>
-(async function() {
-  var p = new URLSearchParams(window.location.search);
-  var code = p.get('code');
-  var state = p.get('state');
+(function() {
+  var isIframe = window.parent !== window;
+  var hash = new URLSearchParams(window.location.hash.replace(/^#/,''));
+  var query = new URLSearchParams(window.location.search);
+  var token = hash.get('access_token');
   var msg = document.getElementById('msg');
+  var sub = document.getElementById('sub');
 
-  if (!code) {
-    msg.textContent = 'No authorization code found.';
-    msg.style.color = '#EF4444';
-    return;
-  }
-
-  // Credentials were encoded in the state param by the app
-  var creds;
-  try { creds = JSON.parse(atob(state)); } catch(e) {
-    msg.textContent = 'Missing credentials in state param.';
-    msg.style.color = '#EF4444';
-    return;
-  }
-
-  msg.textContent = 'Exchanging token…';
-
-  try {
-    var res = await fetch('https://api.box.com/oauth2/token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'authorization_code',
-        code: code,
-        client_id: creds.clientId,
-        client_secret: creds.clientSecret,
-        redirect_uri: creds.redirectUri
-      })
-    });
-    var data = await res.json();
-    if (!res.ok) throw new Error(data.error_description || data.error || 'Unknown error');
-    if (window.opener) {
-      window.opener.postMessage({ type: 'BOX_TOKENS', accessToken: data.access_token, refreshToken: data.refresh_token }, '*');
+  // ── IFRAME POLL MODE: read token from localStorage if stored ──────────
+  if (isIframe) {
+    msg.style.display='none'; sub.style.display='none';
+    var stored = localStorage.getItem('box_token_pending');
+    if (stored) {
+      localStorage.removeItem('box_token_pending');
+      window.parent.postMessage({ type: 'BOX_TOKEN', token: stored }, '*');
     }
-    msg.textContent = '✓ Connected! Close this window.';
-    msg.style.color = '#10B981';
-    setTimeout(function(){ window.close(); }, 2000);
-  } catch(e) {
-    msg.textContent = 'Token exchange failed: ' + e.message;
-    msg.style.color = '#EF4444';
-    if (window.opener) window.opener.postMessage({ type: 'BOX_ERROR', error: e.message }, '*');
+    return;
   }
+
+  // ── POPUP MODE: Box redirects here with #access_token= ───────────────
+  if (!token) {
+    msg.textContent = 'No token received.';
+    msg.style.color = '#EF4444';
+    return;
+  }
+
+  // Store in localStorage (for iframe polling fallback)
+  try { localStorage.setItem('box_token_pending', token); } catch(e) {}
+
+  // Try direct postMessage to opener
+  try {
+    if (window.opener) {
+      window.opener.postMessage({ type: 'BOX_TOKEN', token: token }, '*');
+    }
+  } catch(e) {}
+
+  msg.textContent = '✓ Connected! You can close this window.';
+  msg.style.color = '#10B981';
+  sub.textContent = 'Returning to the app…';
+  setTimeout(function(){ try { window.close(); } catch(e) {} }, 2000);
 })();
 </script>
 </body>
