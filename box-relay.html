@@ -1,0 +1,16 @@
+<!DOCTYPE html><html><head><title>Box Auth</title></head><body style="font-family:sans-serif;padding:40px;text-align:center;background:#f8f9fa">
+<h2 id="msg" style="color:#1a1a2e">Connecting to Box…</h2>
+<p style="color:#6B7280;margin-top:12px">You can close this window once connected.</p>
+<script>
+var p=new URLSearchParams(window.location.search);
+var code=p.get('code');
+if(code){
+  if(window.opener) window.opener.postMessage({type:'BOX_CODE',code:code},'*');
+  document.getElementById('msg').textContent='✓ Connected! Close this window.';
+  document.getElementById('msg').style.color='#10B981';
+  setTimeout(function(){window.close();},2000);
+} else {
+  document.getElementById('msg').textContent='No authorization code found.';
+  document.getElementById('msg').style.color='#EF4444';
+}
+</script></body></html>
