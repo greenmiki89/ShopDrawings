@@ -1,16 +1,58 @@
-<!DOCTYPE html><html><head><title>Box Auth</title></head><body style="font-family:sans-serif;padding:40px;text-align:center;background:#f8f9fa">
+<!DOCTYPE html>
+<html>
+<head><title>Box Auth</title></head>
+<body style="font-family:sans-serif;padding:40px;text-align:center;background:#f8f9fa">
 <h2 id="msg" style="color:#1a1a2e">Connecting to Box…</h2>
 <p style="color:#6B7280;margin-top:12px">You can close this window once connected.</p>
 <script>
-var p=new URLSearchParams(window.location.search);
-var code=p.get('code');
-if(code){
-  if(window.opener) window.opener.postMessage({type:'BOX_CODE',code:code},'*');
-  document.getElementById('msg').textContent='✓ Connected! Close this window.';
-  document.getElementById('msg').style.color='#10B981';
-  setTimeout(function(){window.close();},2000);
-} else {
-  document.getElementById('msg').textContent='No authorization code found.';
-  document.getElementById('msg').style.color='#EF4444';
-}
-</script></body></html>
+(async function() {
+  var p = new URLSearchParams(window.location.search);
+  var code = p.get('code');
+  var state = p.get('state');
+  var msg = document.getElementById('msg');
+
+  if (!code) {
+    msg.textContent = 'No authorization code found.';
+    msg.style.color = '#EF4444';
+    return;
+  }
+
+  // Credentials were encoded in the state param by the app
+  var creds;
+  try { creds = JSON.parse(atob(state)); } catch(e) {
+    msg.textContent = 'Missing credentials in state param.';
+    msg.style.color = '#EF4444';
+    return;
+  }
+
+  msg.textContent = 'Exchanging token…';
+
+  try {
+    var res = await fetch('https://api.box.com/oauth2/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code: code,
+        client_id: creds.clientId,
+        client_secret: creds.clientSecret,
+        redirect_uri: creds.redirectUri
+      })
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error_description || data.error || 'Unknown error');
+    if (window.opener) {
+      window.opener.postMessage({ type: 'BOX_TOKENS', accessToken: data.access_token, refreshToken: data.refresh_token }, '*');
+    }
+    msg.textContent = '✓ Connected! Close this window.';
+    msg.style.color = '#10B981';
+    setTimeout(function(){ window.close(); }, 2000);
+  } catch(e) {
+    msg.textContent = 'Token exchange failed: ' + e.message;
+    msg.style.color = '#EF4444';
+    if (window.opener) window.opener.postMessage({ type: 'BOX_ERROR', error: e.message }, '*');
+  }
+})();
+</script>
+</body>
+</html>
