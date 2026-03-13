@@ -3,48 +3,45 @@
 <head><title>Box Auth</title></head>
 <body style="font-family:sans-serif;padding:40px;text-align:center;background:#f8f9fa">
 <h2 id="msg" style="color:#1a1a2e">Connecting to Box…</h2>
-<p id="sub" style="color:#6B7280;margin-top:12px">You can close this window once connected.</p>
+<p id="sub" style="color:#6B7280;margin-top:12px;font-size:13px">You can close this window once connected.</p>
 <script>
 (function() {
-  var isIframe = window.parent !== window;
-  var hash = new URLSearchParams(window.location.hash.replace(/^#/,''));
   var query = new URLSearchParams(window.location.search);
-  var token = hash.get('access_token');
-  var msg = document.getElementById('msg');
-  var sub = document.getElementById('sub');
+  var code  = query.get('code');
+  var error = query.get('error');
+  var msg   = document.getElementById('msg');
+  var sub   = document.getElementById('sub');
 
-  // ── IFRAME POLL MODE: read token from localStorage if stored ──────────
-  if (isIframe) {
-    msg.style.display='none'; sub.style.display='none';
-    var stored = localStorage.getItem('box_token_pending');
-    if (stored) {
-      localStorage.removeItem('box_token_pending');
-      window.parent.postMessage({ type: 'BOX_TOKEN', token: stored }, '*');
-    }
-    return;
-  }
-
-  // ── POPUP MODE: Box redirects here with #access_token= ───────────────
-  if (!token) {
-    msg.textContent = 'No token received.';
+  if (error) {
+    msg.textContent = 'Box error: ' + error;
     msg.style.color = '#EF4444';
+    try { if(window.opener) window.opener.postMessage({type:'BOX_ERROR', error:error}, '*'); } catch(e){}
     return;
   }
 
-  // Store in localStorage (for iframe polling fallback)
-  try { localStorage.setItem('box_token_pending', token); } catch(e) {}
+  if (!code) {
+    msg.textContent = 'No authorization code found.';
+    msg.style.color = '#EF4444';
+    sub.textContent = 'hash: ' + window.location.hash + ' | query: ' + window.location.search;
+    return;
+  }
 
-  // Try direct postMessage to opener
+  // Send the code back to the opener — token exchange happens in the app (HTTPS, no CORS issue)
   try {
     if (window.opener) {
-      window.opener.postMessage({ type: 'BOX_TOKEN', token: token }, '*');
+      window.opener.postMessage({ type: 'BOX_CODE', code: code }, '*');
+      msg.textContent = '\u2713 Connected! You can close this window.';
+      msg.style.color = '#10B981';
+      setTimeout(function(){ try{window.close();}catch(e){} }, 2000);
+    } else {
+      msg.textContent = 'Opener window not found.';
+      msg.style.color = '#EF4444';
+      sub.textContent = 'Please close this window and try again.';
     }
-  } catch(e) {}
-
-  msg.textContent = '✓ Connected! You can close this window.';
-  msg.style.color = '#10B981';
-  sub.textContent = 'Returning to the app…';
-  setTimeout(function(){ try { window.close(); } catch(e) {} }, 2000);
+  } catch(e) {
+    msg.textContent = 'Error: ' + e.message;
+    msg.style.color = '#EF4444';
+  }
 })();
 </script>
 </body>
